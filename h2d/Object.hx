@@ -726,7 +726,9 @@ class Object {
 			return;
 
 		ctx.globalAlpha = oldAlpha * alpha;
+		@:privateAccess ctx.isFilterTexture = true;
 		emitTile(ctx, finalTile);
+		@:privateAccess ctx.isFilterTexture = false;
 		ctx.globalAlpha = oldAlpha;
 		ctx.flush();
 	}

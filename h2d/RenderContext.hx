@@ -33,6 +33,7 @@ class RenderContext extends h3d.impl.RenderContext {
 	var hasUVPos : Bool;
 	var filterStack : Array<h2d.Object>;
 	var inFilter : Object;
+	var isFilterTexture : Bool;
 
 	var curX : Int;
 	var curY : Int;
@@ -47,6 +48,7 @@ class RenderContext extends h3d.impl.RenderContext {
 	var currentBlend : BlendMode;
 	var baseFlipY : Float;
 	var targetFlipY : Float;
+	var demult : hxsl.ShaderList;
 
 	public function new(scene) {
 		super();
@@ -59,7 +61,7 @@ class RenderContext extends h3d.impl.RenderContext {
 		pass.depth(true, Always);
 		pass.culling = None;
 		currentBlend = Alpha;
-		pass.setBlendMode(currentBlend);
+		updateBlend();
 		baseShader = new h3d.shader.Base2d();
 		baseShader.setPriority(100);
 		baseShader.zValue = 0.;
@@ -67,6 +69,7 @@ class RenderContext extends h3d.impl.RenderContext {
 		targetsStack = [];
 		targetsStackIndex = 0;
 		filterStack = [];
+		demult = new hxsl.ShaderList(new h3d.shader.Demultiply());
 	}
 
 	public function dispose() {
@@ -101,6 +104,17 @@ class RenderContext extends h3d.impl.RenderContext {
 		initShaders(baseShaderList);
 		engine.selectMaterial(pass);
 		textures.begin();
+	}
+
+	function updateBlend() {
+		pass.setBlendMode(currentBlend);
+		switch( currentBlend ) {
+		case Alpha: pass.blendAlphaSrc = One; // correct alpha output
+		case Add: 
+			// TODO
+			pass.blendAlphaSrc = One;
+		default:
+		}
 	}
 
 	public function allocTarget(name, filter = false) {
@@ -269,7 +283,7 @@ class RenderContext extends h3d.impl.RenderContext {
 		if( inFilter == currentObj && blend == Erase ) blend = Add; // add THEN erase
 		if( blend != currentBlend ) {
 			currentBlend = blend;
-			pass.setBlendMode(blend);
+			updateBlend();
 		}
 		manager.fillParams(buffers, compiledShader, currentShaders);
 		engine.selectMaterial(pass);
@@ -365,6 +379,7 @@ class RenderContext extends h3d.impl.RenderContext {
 			fixedBuffer.uploadVector(k, 0, 4);
 		}
 		engine.renderQuadBuffer(fixedBuffer);
+		if( isFilterTexture ) demult.next = null;
 		return true;
 	}
 
@@ -378,6 +393,10 @@ class RenderContext extends h3d.impl.RenderContext {
 			flush();
 		var shaderChanged = false, paramsChanged = false;
 		var objShaders = obj.shaders;
+		if( isFilterTexture ) {
+			demult.next = objShaders;
+			objShaders = demult;
+		}
 		var curShaders = currentShaders.next;
 		while( objShaders != null && curShaders != null ) {
 			var s = objShaders.s;
@@ -399,7 +418,7 @@ class RenderContext extends h3d.impl.RenderContext {
 			baseShader.isRelative = isRelative;
 			baseShader.killAlpha = killAlpha;
 			baseShader.updateConstants(manager.globals);
-			baseShaderList.next = obj.shaders;
+			baseShaderList.next = isFilterTexture ? demult : obj.shaders;
 			initShaders(baseShaderList);
 		} else if( paramsChanged ) {
 			flush();
